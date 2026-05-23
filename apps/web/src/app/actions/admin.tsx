@@ -6,8 +6,6 @@ import { ApplicationStatus, UserRole } from '@prisma/client';
 import { sendCustomEmail } from '@/lib/email';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
-import { generateDocument } from '../../services/pdfGenerator.compiled';
-
 // ─── Supabase Storage Client ──────────────────────────────────────────────────
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || '';
@@ -604,12 +602,14 @@ export async function issueDocument(applicationId: string) {
     console.log(`[issueDocument]   - lgu object passed to generateDocument:`, JSON.stringify({ id: app.lgu.id, name: app.lgu.name, municipality: app.lgu.municipality, province: app.lgu.province, logoUrl: app.lgu.logoUrl }));
 
     // Use a child process to generate the PDF to bypass Next.js Turbopack bundling issues
-    const { execFile } = require('child_process');
-    const path = require('path');
+    const childProc = require('child_process');
+    const execute = childProc['exec' + 'File'];
     
     pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-      const workerPath = path.join(process.cwd(), 'src/services/pdfWorker.js');
-      const child = execFile('node', [workerPath], {
+      // Use array join to bypass Turbopack's extremely aggressive static analysis
+      const pathParts = ['src', 'services', 'pdfWorker.js'];
+      const p = require('path').join(process.cwd(), ...pathParts);
+      const child = execute('node', [p], {
         encoding: 'buffer',
         maxBuffer: 10 * 1024 * 1024 // 10MB
       }, (error: any, stdout: Buffer, stderr: Buffer) => {

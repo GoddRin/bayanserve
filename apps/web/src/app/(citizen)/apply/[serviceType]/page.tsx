@@ -57,7 +57,8 @@ const personalInfoSchema = z.object({
   phone: z.string().regex(/^09\d{9}$/, 'errPhone'),
   address: z.string().min(1, 'errRequired'),
   barangay: z.string().min(1, 'errRequired'),
-  age: z.number({ invalid_type_error: 'errRequired' }).min(15, 'Must be at least 15 years old'),
+  birthDate: z.string().min(1, 'Kailangan ang Petsa ng Kapanganakan (Birth Date is required)'),
+  age: z.number().min(15, 'Must be at least 15 years old'),
   civilStatus: z.string().min(1, 'errRequired'),
 });
 

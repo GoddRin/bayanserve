@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getAdminApplications, bulkAssignApplications, bulkMarkApplicationsAsReviewed } from '@/app/actions/admin';
-import { FileText, Search, UserCheck, Eye, RefreshCw, X, AlertTriangle, Calendar } from 'lucide-react';
+import { getAdminApplications, bulkMarkApplicationsAsReviewed } from '@/app/actions/admin';
+import { FileText, Search, Eye, RefreshCw, X, AlertTriangle, Calendar } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import Link from 'next/link';
 import { useLanguage } from '@/app/providers';
@@ -32,7 +32,6 @@ export default function ApplicationsPage() {
 
   // Bulk actions and row selections
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [assigningOfficerId, setAssigningOfficerId] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
   // Fetch applications
@@ -82,21 +81,6 @@ export default function ApplicationsPage() {
   };
 
   // Bulk mutations
-  const handleBulkAssign = async () => {
-    if (!assigningOfficerId || selectedIds.length === 0) return;
-    setActionLoading(true);
-    try {
-      await bulkAssignApplications(selectedIds, assigningOfficerId);
-      setSelectedIds([]);
-      setAssigningOfficerId('');
-      fetchApplications();
-    } catch (err: any) {
-      alert(err.message || 'Nabigong italaga ang officer.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const handleBulkMarkAsReviewed = async () => {
     if (selectedIds.length === 0) return;
     setActionLoading(true);
