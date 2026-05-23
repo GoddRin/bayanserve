@@ -1,0 +1,330 @@
+// ============================================================================
+// BayanServe — Philippines LGU Civic Services Platform
+// Prisma Schema (PostgreSQL)
+// ============================================================================
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CITIZEN
+  BARANGAY_CLERK
+  DEPARTMENT_OFFICER
+  TREASURER
+  ADMIN
+  MAYOR
+}
+
+enum ServiceCategory {
+  CLEARANCE
+  PERMIT
+  CERTIFICATE
+  COMPLAINT
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  PENDING_PAYMENT
+  APPROVED
+  REJECTED
+  RELEASED
+}
+
+enum PaymentMethod {
+  GCASH
+  MAYA
+  CASH
+  BANK
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  SMS
+  EMAIL
+  IN_APP
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. MULTI-TENANT: LGU
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Lgu {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  municipality  String
+  province      String
+  logoUrl       String?  @map("logo_url")
+  primaryColor  String   @default("#0f3d6b") @map("primary_color")
+  contactEmail  String   @map("contact_email")
+  contactPhone  String?  @map("contact_phone")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations — everything scoped to this LGU
+  users              User[]
+  serviceTypes       ServiceType[]
+  applications       Application[]
+  payments           Payment[]
+  issuedDocuments    IssuedDocument[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  emailTemplates     EmailTemplate[]
+
+  @@map("lgus")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. USERS & ROLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  lguId        String?   @map("lgu_id")
+  fullName     String    @map("full_name")
+  email        String    @unique
+  phone        String?
+  password     String?   // bcrypt hash — only for staff users
+  nationalId   String?   @map("national_id") // PhilSys National ID
+  address      String?
+  barangay     String?
+  role         UserRole  @default(CITIZEN)
+  isVerified   Boolean   @default(false) @map("is_verified")
+  otpCode            String?   @map("otp_code")
+  otpExpiresAt       DateTime? @map("otp_expires_at")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  lgu                    Lgu?                  @relation(fields: [lguId], references: [id], onDelete: SetNull)
+  applications           Application[]         @relation("CitizenApplications")
+  statusChanges          ApplicationHistory[]  @relation("StatusChangedBy")
+  issuedByDocuments      IssuedDocument[]      @relation("DocumentIssuedBy")
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  assignedApplications   Application[]         @relation("AssignedApplications")
+
+  @@index([lguId])
+  @@index([email])
+  @@index([nationalId])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SERVICES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ServiceType {
+  id                 String          @id @default(cuid())
+  lguId              String          @map("lgu_id")
+  name               String          // e.g. "Barangay Clearance"
+  category           ServiceCategory
+  baseFee            Decimal         @default(0) @map("base_fee") @db.Decimal(10, 2)
+  processingDays     Int             @default(3) @map("processing_days")
+  requiredDocuments  Json            @default("[]") @map("required_documents") // JSON array of strings
+  isActive           Boolean         @default(true) @map("is_active")
+
+  // Relations
+  lgu          Lgu           @relation(fields: [lguId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@unique([lguId, name])
+  @@index([lguId])
+  @@map("service_types")
+}
+
+model Application {
+  id               String            @id @default(cuid())
+  lguId            String            @map("lgu_id")
+  citizenId        String            @map("citizen_id")
+  serviceTypeId    String            @map("service_type_id")
+  trackingNumber   String            @unique @map("tracking_number")
+  status           ApplicationStatus @default(SUBMITTED)
+  formData         Json?             @map("form_data")
+  notes            String?           @db.Text
+  submittedAt      DateTime          @default(now()) @map("submitted_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  lgu              Lgu                    @relation(fields: [lguId], references: [id], onDelete: Cascade)
+  citizen          User                   @relation("CitizenApplications", fields: [citizenId], references: [id], onDelete: Cascade)
+  serviceType      ServiceType            @relation(fields: [serviceTypeId], references: [id], onDelete: Restrict)
+  documents        ApplicationDocument[]
+  history          ApplicationHistory[]
+  payments         Payment[]
+  issuedDocuments  IssuedDocument[]
+  assignedOfficerId String?              @map("assigned_officer_id")
+  assignedOfficer   User?                @relation("AssignedApplications", fields: [assignedOfficerId], references: [id], onDelete: SetNull)
+
+  @@index([trackingNumber])
+  @@index([lguId])
+  @@index([citizenId])
+  @@index([status])
+  @@map("applications")
+}
+
+model ApplicationDocument {
+  id            String   @id @default(cuid())
+  applicationId String   @map("application_id")
+  filename      String
+  fileUrl       String   @map("file_url")
+  fileType      String   @map("file_type") // e.g. "image/jpeg", "application/pdf"
+  uploadedAt    DateTime @default(now()) @map("uploaded_at")
+
+  // Relations
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("application_documents")
+}
+
+model ApplicationHistory {
+  id            String            @id @default(cuid())
+  applicationId String            @map("application_id")
+  changedBy     String            @map("changed_by")
+  oldStatus     ApplicationStatus @map("old_status")
+  newStatus     ApplicationStatus @map("new_status")
+  remarks       String?           @db.Text
+  changedAt     DateTime          @default(now()) @map("changed_at")
+
+  // Relations
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedByUser User       @relation("StatusChangedBy", fields: [changedBy], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([changedBy])
+  @@map("application_history")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. PAYMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                String        @id @default(cuid())
+  applicationId     String        @map("application_id")
+  lguId             String        @map("lgu_id")
+  amount            Decimal       @db.Decimal(10, 2)
+  method            PaymentMethod
+  referenceNumber   String?       @map("reference_number")
+  paymongoPaymentId String?       @map("paymongo_payment_id")
+  status            PaymentStatus @default(PENDING)
+  paidAt            DateTime?     @map("paid_at")
+
+  // Relations
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  lgu         Lgu         @relation(fields: [lguId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([lguId])
+  @@index([referenceNumber])
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. DOCUMENTS ISSUED
+// ─────────────────────────────────────────────────────────────────────────────
+
+model IssuedDocument {
+  id            String   @id @default(cuid())
+  applicationId String   @map("application_id")
+  lguId         String   @map("lgu_id")
+  documentType  String   @map("document_type")
+  qrToken       String   @unique @default(uuid()) @map("qr_token")
+  fileUrl       String?  @map("file_url")
+  issuedBy      String   @map("issued_by")
+  issuedAt      DateTime @default(now()) @map("issued_at")
+  isRevoked     Boolean  @default(false) @map("is_revoked")
+
+  // Relations
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  lgu           Lgu         @relation(fields: [lguId], references: [id], onDelete: Cascade)
+  issuedByUser  User        @relation("DocumentIssuedBy", fields: [issuedBy], references: [id], onDelete: Cascade)
+
+  @@index([qrToken])
+  @@index([applicationId])
+  @@index([lguId])
+  @@map("issued_documents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id           String           @id @default(cuid())
+  userId       String?          @map("user_id")
+  lguId        String           @map("lgu_id")
+  type         NotificationType
+  message      String           @db.Text
+  isSent       Boolean          @default(false) @map("is_sent")
+  sentAt       DateTime?        @map("sent_at")
+  errorMessage String?          @map("error_message") @db.Text
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lgu  Lgu   @relation(fields: [lguId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lguId])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. AUDIT LOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  lguId      String   @map("lgu_id")
+  userId     String   @map("user_id")
+  action     String   // e.g. "APPLICATION_APPROVED", "PAYMENT_RECEIVED"
+  entityType String   @map("entity_type") // e.g. "Application", "Payment"
+  entityId   String   @map("entity_id")
+  metadata   Json?    // Arbitrary context payload
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  lgu  Lgu  @relation(fields: [lguId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([lguId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. EMAIL TEMPLATES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  lguId     String   @map("lgu_id")
+  lgu       Lgu      @relation(fields: [lguId], references: [id], onDelete: Cascade)
+  type      String   // matches NotificationType enum values
+  subject   String
+  body      String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([lguId, type])
+  @@map("email_templates")
+}

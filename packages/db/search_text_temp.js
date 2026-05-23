@@ -1,0 +1,26 @@
+const fs = require('fs');
+const path = require('path');
+
+function search(dir, query) {
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      if (file !== 'node_modules' && file !== '.next') {
+        search(fullPath, query);
+      }
+    } else if (stat.isFile() && (file.endsWith('.ts') || file.endsWith('.tsx') || file.endsWith('.js') || file.endsWith('.json'))) {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      if (content.includes(query)) {
+        console.log(`Found "${query}" in ${fullPath}`);
+      }
+    }
+  }
+}
+
+console.log('Searching for "paymentSummary":');
+search('d:\\Projects\\bayanserve\\apps\\web\\src', 'paymentSummary');
+
+console.log('\nSearching for "personalInfo":');
+search('d:\\Projects\\bayanserve\\apps\\web\\src', 'personalInfo');
