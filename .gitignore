@@ -4,3 +4,5 @@ dist
 .env.local
 .next
 apps/api/src/scratch/output/
+
+.vercel
