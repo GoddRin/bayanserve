@@ -135,14 +135,10 @@ function getEmailWrapper(
               <p style="margin: 0 0 10px 0; color: #475569; font-size: 13px; font-weight: 600;">
                 ${lgu.name} Office of the Mayor
               </p>
-              <p style="margin: 0 0 16px 0; color: #64748b; font-size: 12px; line-height: 1.5;">
-                📍 ${lgu.address}<br/>
-                📞 ${lguPhone}
-              </p>
               <p style="margin: 0; color: #94a3b8; font-size: 11px; line-height: 1.6; border-top: 1px dashed #cbd5e1; padding-top: 16px;">
                 Para sa tulong, makipag-ugnayan sa:<br />
-                Municipality of Peñablanca<br />
-                (078) 304-0399 | Penablanca.LGU@negosyocenter.gov.ph
+                ${lgu.name}<br />
+                ${lguPhone} | ${lguEmail}
               </p>
             </td>
           </tr>
@@ -542,7 +538,7 @@ export async function sendNotification(
     }
 
     // Wrap body HTML in the premium responsive outer shell.
-    const emailFullHtml = getEmailWrapper(emailInnerHtml, lgu, lguEmail, lguPhone, primaryColor);
+    const emailFullHtml = getEmailWrapper(emailInnerHtml, lgu, '', lguPhone, primaryColor);
 
     // Dynamic transporter handling for dynamic self-testing
     let mailTransporter = transporter;
